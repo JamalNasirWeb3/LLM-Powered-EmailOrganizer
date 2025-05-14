@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Email Summarizer Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+</head>
+<body class="bg-light">
+
+<div class="container mt-5">
+    <h1 class="text-center mb-4">📬 Summarized Emails Dashboard</h1>
+
+    {% for category, emails in categorized_emails.items() %}
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">{{ category }} ({{ emails|length }})</h4>
+            </div>
+            <div class="card-body">
+                {% if emails %}
+                    {% for email in emails %}
+                        <div class="mb-4">
+                            <h5><span class="badge bg-info text-dark">{{ email.from }}</span></h5>
+                            <p><strong>Subject:</strong> {{ email.subject }}</p>
+                            <p><strong>Summary:</strong> {{ email.summary }}</p>
+                            <p>
+                                {% if email.flags %}
+                                    {% for flag in email.flags %}
+                                        {% if 'URGENT' in flag %}
+                                            <span class="badge bg-danger">{{ flag }}</span>
+                                            <!-- Show Reply Button only for Urgent -->
+                                            <button class="btn btn-sm btn-warning mt-2 reply-btn" data-body="{{ email.summary|escape }}" data-from="{{ email.from }}" data-subject="{{ email.subject }}">Generate Reply</button>
+                                        {% elif 'POSITIVE' in flag %}
+                                            <span class="badge bg-success">{{ flag }}</span>
+                                        {% elif 'FRUSTRATED' in flag %}
+                                            <span class="badge bg-warning text-dark">{{ flag }}</span>
+                                        {% elif 'COMMITMENTS' in flag %}
+                                            <span class="badge bg-secondary">{{ flag }}</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">{{ flag }}</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% endif %}
+                            </p>
+                            <div class="reply-area mt-3" style="display:none;"></div>
+                            <hr>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">No emails in this category.</p>
+                {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+</div>
+
+<script>
+$(document).ready(function(){
+    $(".reply-btn").click(function(){
+        var body = $(this).data("body");
+        var from = $(this).data("from");
+        var subject = $(this).data("subject");
+        var button = $(this);
+        button.prop("disabled", true).text("Generating...");
+
+        $.post("/generate_reply", {body: body, from: from, subject: subject}, function(data){
+            button.closest("div").find(".reply-area").html(
+    '<div class="alert alert-success">' +
+    '<strong>Edit Suggested Reply:</strong><br>' +
+    '<textarea class="form-control mt-2 reply-textarea" rows="6">' + data.reply + '</textarea><br>' +
+    '<button class="btn btn-sm btn-success send-reply mt-2" data-to="'+data.to+'" data-subject="'+data.subject+'">Send Reply</button>' +
+    '<button class="btn btn-sm btn-secondary copy-reply mt-2">Copy Reply</button>' +
+    '<button class="btn btn-sm btn-info download-reply mt-2">Download Reply</button>' +
+    '</div>'
+).slideDown();
+        });
+    });
+});
+
+$(document).on('click', '.download-reply', function() {
+        var replyText = $(this).closest('.alert').find('.reply-textarea').val();
+        var blob = new Blob([replyText], { type: "text/plain;charset=utf-8" });
+        var link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = "reply.txt";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+
+    // When Copy button is clicked
+    $(document).on('click', '.copy-reply', function() {
+        var replyText = $(this).closest('.alert').find('.reply-textarea').val();
+        navigator.clipboard.writeText(replyText).then(function() {
+            alert('Reply copied to clipboard!');
+        });
+    });
+
+    // When Send button is clicked
+    $(document).on('click', '.send-reply', function() {
+        var button = $(this);
+        var replyText = button.closest('.alert').find('.reply-textarea').val();
+        var to = button.data("to");
+        var subject = button.data("subject");
+
+        button.prop("disabled", true).text("Sending...");
+
+        $.post("/send_reply", {to: to, subject: subject, body: replyText}, function(data){
+            if (data.status === "success") {
+                alert("Reply sent successfully!");
+            } else {
+                alert("Error sending reply: " + data.message);
+            }
+            button.prop("disabled", false).text("Send Reply");
+        });
+    });
+
+
+
+
+</script>
+
+</body>
+</html>
